@@ -61,7 +61,7 @@ steps:
       on_success: 
              metadata:
                   set:
-                   - '${{products_build.imageId}}':
+                   - '${{users_build.imageId}}':
                      - CF_USERS_QUALITY: true
                      - "release_name" : '${{RELEASE_NAME}}'
       stage: "test"
@@ -88,7 +88,7 @@ steps:
   pushToMyRegistryProducts:
      stage: 'push'
      type: push
-     title: Pushing to a registry -  '${{RELEASE_NAME}}'  Quality tested Products
+     title: "Products for '${{RELEASE_NAME}}' Pushing to registry"
      candidate: ${{products_build}}
      tags: 
      - ${{CF_SHORT_REVISION}}
@@ -103,7 +103,7 @@ steps:
   pushToMyRegistryUsers:
        stage: 'push'
        type: push
-       title: Pushing to a registry - Next Release Quality tested Users
+       title: "Users for '${{RELEASE_NAME}}' , Pushing to registry"
        candidate: ${{users_build}}
        tags: 
        - ${{CF_SHORT_REVISION}}
