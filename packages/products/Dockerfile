@@ -1,5 +1,5 @@
 FROM node:10-alpine
-#test 2.7 produts true
+#test 2.8 produts true
 
 # ENV WAIT_VERSION 2.7.3
 # ADD https://github.com/ufoscout/docker-compose-wait/releases/download/$WAIT_VERSION/wait /wait
