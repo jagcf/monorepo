@@ -125,11 +125,11 @@ steps:
         - export MY_PRODUCTS_QUALITY=$(codefresh get images --all --images-name monorepo --tag products_qa_passed -o json| jq -r .[0].annotations.release_name)
         - export MY_USERS_QUALITY=$(codefresh get images --all --images-name monorepo --tag users_qa_passed -o json| jq -r .[0].annotations.release_name)
         - echo "products quality tested for the release $MY_PRODUCTS_QUALITY"
-        - echo "users quality tested for the rlease  $MY_USERS_QUALITY"
+        - echo "users quality tested for the release  $MY_USERS_QUALITY"
         - if [ $MY_PRODUCTS_QUALITY == $RELEASE_NAME ] && [ $MY_USERS_QUALITY == $RELEASE_NAME ]; then echo 'ready for cd' ; cf_export CD_READY=true ; else echo 'not ready for cd' ; cf_export CD_READY=false  ; fi
         
   deploy_when_all_services_ready :
-    title: "Running Deployment When all serivces tested and ready for the release '${{RELEASE_NAME}}'"
+    title: "Running Deployment When all services tested and ready for the release '${{RELEASE_NAME}}'"
     type: "freestyle" # Run any command
     image: "node:10" #"ubuntu:latest" # The image in which command will be executed
     working_directory: "${{clone}}" # Running command where code cloned
