@@ -1,0 +1,158 @@
+# More examples of Codefresh YAML can be found at
+# https://codefresh.io/docs/docs/yaml-examples/examples/
+
+version: "1.0"
+# Stages can help you organize your steps in stages
+stages:
+  - "clone"
+  - "build"
+  - "test"
+  - "push"
+  - "cd-readiness-check"
+  - "Deploy"
+
+steps:
+  clone:
+    title: "Cloning repository for '${{RELEASE_NAME}}'"
+    type: "git-clone"
+    repo: "jagcf/monorepo"
+    # CF_BRANCH value is auto set when pipeline is triggered
+    # Learn more at codefresh.io/docs/docs/codefresh-yaml/variables/
+    revision: "${{CF_BRANCH}}"
+    git: "github-jagcf"
+    stage: "clone"
+
+  users_build:
+    title: "Building Users Service Docker image for '${{RELEASE_NAME}}'"
+    type: "build"
+    image_name: "monorepo/users"
+    working_directory: "${{clone}}/packages/users"
+    tag: "${{CF_BRANCH_TAG_NORMALIZED}}"
+    dockerfile: "Dockerfile"
+    stage: "build"
+    when:
+        condition:
+          all:
+            detectedUsersCI: "includes('${{CF_COMMIT_MESSAGE}}', 'users_build') == true"
+  products_build:
+     title: "Building Products Service Docker image '${{RELEASE_NAME}}' "
+     type: "build"
+     image_name: "monorepo/products"
+     working_directory: "${{clone}}/packages/products"
+     tag: "${{CF_BRANCH_TAG_NORMALIZED}}"
+     dockerfile: "Dockerfile"
+     stage: "build"
+     when:
+             condition:
+               all:
+                 detectedUsersCI: "includes('${{CF_COMMIT_MESSAGE}}', 'products_build') == true"
+  testing_users_service :
+      title: "Running users service test for '${{RELEASE_NAME}}'"
+      type: "freestyle" # Run any command
+      image: "node:10" #"ubuntu:latest" # The image in which command will be executed
+      working_directory: "${{clone}}" # Running command where code cloned
+      commands:
+        - "echo testing users serive passed for $RELEASE_NAME "
+        - "echo $CF_BUILD_TRIGGER"
+      when:
+                   condition:
+                     all:
+                       detectedUsersCI: "includes('${{CF_COMMIT_MESSAGE}}', 'users_build') == true"  
+      on_success: 
+             metadata:
+                  set:
+                   - '${{products_build.imageId}}':
+                     - CF_USERS_QUALITY: true
+                     - "release_name" : '${{RELEASE_NAME}}'
+      stage: "test"
+
+  testing_products_service :
+    title: "Running products servie test for '${{RELEASE_NAME}}' "
+    type: "freestyle" # Run any command
+    image: "node:10" #"ubuntu:latest" # The image in which command will be executed
+    working_directory: "${{clone}}" # Running command where code cloned
+    commands:
+      - "echo testing products serive passed for $RELEASE_NAME"
+      - "echo $CF_BUILD_TRIGGER"
+    when:
+                 condition:
+                   all:
+                     detectedUsersCI: "includes('${{CF_COMMIT_MESSAGE}}', 'products_build') == true"  
+    on_success: 
+           metadata:
+                set:
+                 - '${{products_build.imageId}}':
+                   - CF_PRODUCTS_QUALITY: true
+                   - "release_name" : '${{RELEASE_NAME}}'
+    stage: "test"
+  pushToMyRegistryProducts:
+     stage: 'push'
+     type: push
+     title: Pushing to a registry -  '${{RELEASE_NAME}}'  Quality tested Products
+     candidate: ${{products_build}}
+     tags: 
+     - ${{CF_SHORT_REVISION}}
+     - products_qa_passed
+     - '${{RELEASE_NAME}}'
+     - latest
+     registry: gcr 
+     when:
+                        condition:
+                          all:
+                            detectedUsersCI: "includes('${{CF_COMMIT_MESSAGE}}', 'products_build') == true"  
+  pushToMyRegistryUsers:
+       stage: 'push'
+       type: push
+       title: Pushing to a registry - Next Release Quality tested Users
+       candidate: ${{users_build}}
+       tags: 
+       - ${{CF_SHORT_REVISION}}
+       - users_qa_passed
+       - '${{RELEASE_NAME}}'
+       - latest
+       registry: gcr 
+       when:
+                          condition:
+                            all:
+                              detectedUsersCI: "includes('${{CF_COMMIT_MESSAGE}}', 'users_build') == true" 
+
+  CheckAllPassedService:
+      title: Check if all the serivces from monorepo have quality tested service for the release '${{RELEASE_NAME}}'
+      stage : "Deploy"
+      image: codefresh/cli
+      
+      commands:
+        - export MY_PRODUCTS_QUALITY=$(codefresh get images --all --images-name monorepo --tag products_qa_passed -o json| jq -r .[0].annotations.release_name)
+        - export MY_USERS_QUALITY=$(codefresh get images --all --images-name monorepo --tag users_qa_passed -o json| jq -r .[0].annotations.release_name)
+        - echo "products quality tested for the release $MY_PRODUCTS_QUALITY"
+        - echo "users quality tested for the rlease  $MY_USERS_QUALITY"
+        - if [ $MY_PRODUCTS_QUALITY == $RELEASE_NAME ] && [ $MY_USERS_QUALITY == $RELEASE_NAME ]; then echo 'ready for cd' ; cf_export CD_READY=true ; else echo 'not ready for cd' ; cf_export CD_READY=false  ; fi
+        
+  deploy_when_all_services_ready :
+    title: "Running Deployment When all serivces tested and ready for the release '${{RELEASE_NAME}}'"
+    type: "freestyle" # Run any command
+    image: "node:10" #"ubuntu:latest" # The image in which command will be executed
+    working_directory: "${{clone}}" # Running command where code cloned
+    commands:
+      - "echo users and products were quality tested and ready to deploy for the release '${{RELEASE_NAME}}'"
+      - "echo $CF_BUILD_TRIGGER"
+      -  "echo $CD_READY"
+    when:
+                 condition:
+                   all:
+                     detectedUsersCI: '"${{CD_READY}}" == "true"'
+    on_success: 
+          annotations:
+            set:
+              # - entity_id: my-project/my-basic-pipeline 
+              #   entity_type: pipeline
+              #   annotations:
+              #   - my_annotation_example1: 10.45
+              #   - my_empty_annotation
+              #   - my_string_annotation: Hello World
+              - entity_id: '${{CF_BUILD_ID}}' 
+                entity_type: build
+                annotations:
+                - deploy_status: "deplloyed the release '${{RELEASE_NAME}}'"
+               
+    stage: "Deploy"
